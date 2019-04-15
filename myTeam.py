@@ -171,8 +171,11 @@ class MinimaxAgent(CaptureAgent):
     bestAction = None
     for a in actions:
         successor = self.getSuccessor(gameState, a, self.index)
-        temp = self.value(successor, 0, 2, self.index)[0]
-        if value < temp:
+        temp = self.value(successor, 0, 0, self.index)[0]
+
+        print "action = " + a + " " + "value =  " + str(temp) +"\n"
+
+        if value < temp:# random pick
             value = temp
             bestAction = a
     succPos = gameState.getAgentState(self.index).getPosition()
@@ -249,12 +252,15 @@ class MinimaxAgent(CaptureAgent):
           oppPos = oppState.getPosition()
 
           enemies = [gameState.getAgentState(i) for i in myteam]
+          o = [gameState.getAgentState(i) for i in opponents]
+
           ghosts = [a for a in enemies if not a.isPacman and a.getPosition() != None]
           pacmans = [a for a in enemies if a.isPacman and a.getPosition() != None]
+          oppPacmans = [a for a in o if a.isPacman and a.getPosition() != None]
 
           distsToEnemy = [self.getMazeDistance(oppPos, a.getPosition()) for a in enemies]
           distsToGhost = [self.getMazeDistance(oppPos, a.getPosition()) for a in ghosts]
-          distsToPacman = [self.getMazeDistance(oppPos, a.getPosition()) for a in pacmans]
+          distsToOppPacman = [self.getMazeDistance(oppPos, a.getPosition()) for a in oppPacmans]
 
           distsToAllEnemy = 0
           for d in distsToEnemy:
@@ -266,15 +272,15 @@ class MinimaxAgent(CaptureAgent):
           distsToAllGhost = 0
           for d in distsToGhost:
               distsToAllGhost += d
-          #features['distsToAllGhost'] = distsToAllGhost
-          #weights['distsToAllGhost'] = -1
+          # features['distsToAllGhost'] = distsToAllGhost
+          # weights['distsToAllGhost'] = -1
           if distsToGhost:
               features['distsToClosestGhost'] = min(distsToGhost)
               if min(distsToGhost) > 2: # maintain a fixed distance between enemy
-                  weights['distsToClosestGhost'] = -100
+                  weights['distsToClosestGhost'] = -1
               #        weights['distsToAllGhost'] = -100
               else:
-                  weights['distsToClosestGhost'] = 1000
+                  weights['distsToClosestGhost'] = -1
           #        weights['distsToAllGhost'] = 100
           #features['keepForward'] = 1
           #for d in distsToGhost:
@@ -284,13 +290,18 @@ class MinimaxAgent(CaptureAgent):
           #        weights['keepForward'] = -1000
 
           # defensive behavior
+          features['numOfInvader'] = len(oppPacmans)
+          weights['numOfInvader'] = -1000
+
+          print "pacnum"+str(len(oppPacmans))
           distsToAllPacmans = 0
-          for d in distsToPacman:
+          for d in distsToOppPacman:
               distsToAllPacmans += d
           features['distsToAllPacmans'] = distsToAllPacmans
-          if distsToPacman:
-              features['distsToClosestPacman'] = min(distsToPacman)  # defensive feature
-              #weights['distsToClosestPacman'] = -10000
+          weights['distsToAllPacmans'] = -10000
+          # if distsToPacman:
+          #     features['distsToClosestPacman'] = min(distsToPacman)  # defensive feature
+          #     weights['distsToClosestPacman'] = -100
               #weights['distsToAllPacmans'] = -10000
 
           # if distsToAllPacmans:
@@ -309,12 +320,12 @@ class MinimaxAgent(CaptureAgent):
           # weights['currentScore'] = 1000
 
           # eat the closest food first
-          if len(foodList) > 0:  # This should always be True,  but better safe than sorry
-              minDistance = min([self.getMazeDistance(oppPos, food) for food in foodList])
-              if minDistance < 10:
-                  features['eatFood'] = -len(foodList)
-              features['distanceToFood'] = minDistance
-          #weights['distanceToFood'] = -100000000
+          # if len(foodList) > 0:  # This should always be True,  but better safe than sorry
+          #     minDistance = min([self.getMazeDistance(oppPos, food) for food in foodList])
+          #     if minDistance < 10:
+          #         features['eatFood'] = -len(foodList)
+          #     features['distanceToFood'] = minDistance
+          # weights['distanceToFood'] = -1
           # weights['eatFood'] = 1
 
           # go back if have one food
@@ -332,50 +343,50 @@ class MinimaxAgent(CaptureAgent):
           #weights['distsToClosestGhost'] = -1
 
 
-      else:
-          myState = gameState.getAgentState(turn)
-          myPos = myState.getPosition()
-
-          enemies = [gameState.getAgentState(i) for i in opponents]
-          ghosts = [a for a in enemies if not a.isPacman and a.getPosition() != None]
-          pacmans = [a for a in enemies if a.isPacman and a.getPosition() != None]
-
-          distsToGhost = [self.getMazeDistance(myPos, a.getPosition()) for a in ghosts]
-          distsToPacman = [self.getMazeDistance(myPos, a.getPosition()) for a in pacmans]
-
-          distsToAllGhost = 0
-          for d in distsToGhost:
-              distsToAllGhost += d
-          features['distsToAllGhost'] = distsToAllGhost  # avoid being eaten by the ghost
-          weights['distsToAllGhost'] = 10
-
-          if distsToGhost:
-              # features['distsToClosestGhost'] = min(distsToGhost)
-              if min(distsToGhost) > 2: # maintain a fixed distance between enemy
-                  # weights['distsToClosestGhost'] = -100
-                  weights['distsToAllGhost'] = 10
-              else:
-                  # weights['distsToClosestGhost'] = 1
-                  weights['distsToAllGhost'] = -10
-
-          distsToAllPacmans = 0
-          for d in distsToPacman:
-              distsToAllPacmans += d
-          features['distsToAllPacmans'] = distsToAllPacmans
-          weights['distsToAllPacmans'] = 1000
-
-          if distsToPacman:
-            features['distsToClosestPacman'] = min(distsToPacman)  # defensive feature
-            weights['distsToClosestPacman'] = 10000
-
-          # eat the closest food first
-          foodList = self.getFood(gameState).asList()
-          if len(foodList) > 0:  # This should always be True,  but better safe than sorry
-             minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
-             if minDistance < 20:
-                features['eatFood'] = -len(foodList)
-                features['distanceToFood'] = minDistance
-          weights['distanceToFood'] = 100000000
+      # else:
+      #     myState = gameState.getAgentState(turn)
+      #     myPos = myState.getPosition()
+      #
+      #     enemies = [gameState.getAgentState(i) for i in opponents]
+      #     ghosts = [a for a in enemies if not a.isPacman and a.getPosition() != None]
+      #     pacmans = [a for a in enemies if a.isPacman and a.getPosition() != None]
+      #
+      #     distsToGhost = [self.getMazeDistance(myPos, a.getPosition()) for a in ghosts]
+      #     distsToPacman = [self.getMazeDistance(myPos, a.getPosition()) for a in pacmans]
+      #
+      #     distsToAllGhost = 0
+      #     for d in distsToGhost:
+      #         distsToAllGhost += d
+      #     # features['distsToAllGhost'] = distsToAllGhost  # avoid being eaten by the ghost
+      #     # weights['distsToAllGhost'] = 10
+      #
+      #     # if distsToGhost:
+      #     #     # features['distsToClosestGhost'] = min(distsToGhost)
+      #     #     if min(distsToGhost) > 2: # maintain a fixed distance between enemy
+      #     #         # weights['distsToClosestGhost'] = -100
+      #     #         weights['distsToAllGhost'] = -10
+      #     #     else:
+      #     #         # weights['distsToClosestGhost'] = 1
+      #     #         weights['distsToAllGhost'] = -10
+      #
+      #     distsToAllPacmans = 0
+      #     for d in distsToPacman:
+      #         distsToAllPacmans += d
+      #     features['distsToAllPacmans'] = distsToAllPacmans
+      #     weights['distsToAllPacmans'] = 100
+      #
+      #     if distsToPacman:
+      #       features['distsToClosestPacman'] = min(distsToPacman)  # defensive feature
+      #       weights['distsToClosestPacman'] = 100
+      #
+      #     # eat the closest food first
+      #     foodList = self.getFood(gameState).asList()
+      #     if len(foodList) > 0:  # This should always be True,  but better safe than sorry
+      #        minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
+      #        if minDistance < 20:
+      #           features['eatFood'] = -len(foodList)
+      #           features['distanceToFood'] = minDistance
+      #     # weights['distanceToFood'] = 100
 
       return features * weights
   """
@@ -627,6 +638,7 @@ class defensiveMinimaxAgent(MinimaxAgent):
         return features
 
     def getWeights(self, gameState, action):
+
         return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2}
 
 
