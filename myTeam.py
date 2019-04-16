@@ -21,9 +21,11 @@ from util import nearestPoint
 #################
 # Team creation #
 #################
+mode = -1 # 0=off, 1=def, 2=gohome
+holdFood = 0
 
 def createTeam(firstIndex, secondIndex, isRed,
-               first = 'MinimaxAgent', second = 'MinimaxAgent'):
+               first = 'OffensiveMinimaxAgent', second = 'DefensiveMinimaxAgent'):
   """
   This function should return a list of two agents that will form the
   team, initialized using firstIndex and secondIndex as their agent
@@ -51,6 +53,7 @@ class MinimaxAgent(CaptureAgent):
   1) our team: Max1 and Max2
   2) their team: Min1 and Min2
   """
+
   def registerInitialState(self, gameState):
     self.start = gameState.getAgentPosition(self.index)
     CaptureAgent.registerInitialState(self, gameState)
@@ -121,31 +124,31 @@ class MinimaxAgent(CaptureAgent):
           value = max(value, self.min_value(successor, a, currDepth + 1, targetDepth, opponent, turn))
       return value
   """
-  def max_value(self, gameState, currDepth, targetDepth, turn):
+  def max_value(self, gameState, action, currDepth, targetDepth, turn):
       value = float("-inf")
       actions = gameState.getLegalActions(turn)
       action = None
       for a in actions:
           successor = self.getSuccessor(gameState, a, turn)
-          temp = self.value(successor, currDepth + 1, targetDepth, turn)[0]
+          temp = self.value(successor, action, currDepth + 1, targetDepth, turn)[0]
           if value < temp:
               value = temp
               action = a
       return (value, action)
 
-  def min_value(self, gameState, currDepth, targetDepth, turn):
+  def min_value(self, gameState, action, currDepth, targetDepth, turn):
       value = float("inf")
       actions = gameState.getLegalActions(turn)
       returnAction = None
       for a in actions:
           successor = self.getSuccessor(gameState, a, turn)
-          temp = self.value(successor, currDepth + 1, targetDepth, turn)[0]
+          temp = self.value(successor, action, currDepth + 1, targetDepth, turn)[0]
           if value > temp:
               value = temp
               returnAction = a
       return (value, returnAction)
 
-  def value(self, gameState, currDepth, targetDepth, turn):
+  def value(self, gameState, action, currDepth, targetDepth, turn):
       """
       return the best action for the root agent
       :param gameState: current game state
@@ -154,32 +157,46 @@ class MinimaxAgent(CaptureAgent):
       :return: a tuple: (value, action)
       """
       if currDepth == targetDepth:
-          return (self.evaluate(gameState, (turn + 1) % 4), )  # TODO: implement it
+          return (self.evaluate(gameState, action, (turn + 1) % 4), )  # TODO: implement it
 
       myteam = self.getTeam(gameState)
       if (turn + 1) % 4 in myteam:  # next is MAX
-          return self.max_value(gameState, currDepth, targetDepth, (turn + 1) % 4)
+          return self.max_value(gameState, action,  currDepth, targetDepth, (turn + 1) % 4)
       else:  # next is MIN
-          return self.min_value(gameState, currDepth, targetDepth, (turn + 1) % 4)
+          return self.min_value(gameState, action, currDepth, targetDepth, (turn + 1) % 4)
 
   def chooseAction(self, gameState):
     """
     choose the action based on the utilities of Max or Min
     """
+    global holdFood
+
+    # if holdFood == 1*2 and not gameState.getAgentState(self.index).isPacman:
+    #     print "Get home"
+    #     holdFood = 0
+        
     value = float("-inf")
     actions = gameState.getLegalActions(self.index)
     bestAction = None
     for a in actions:
         successor = self.getSuccessor(gameState, a, self.index)
-        temp = self.value(successor, 0, 0, self.index)[0]
+        temp = self.value(successor, a, 0, 0, self.index)[0]
 
-        print "action = " + a + " " + "value =  " + str(temp) +"\n"
+        # print "action = " + a + " " + "value =  " + str(temp) +"\n"
 
         if value < temp:# random pick
             value = temp
             bestAction = a
     succPos = gameState.getAgentState(self.index).getPosition()
     self.debugDraw([succPos],[1,0,0], False)
+
+    foodLeft = len(self.getFood(gameState).asList())
+    if len(self.observationHistory) != 1:
+      foodBefore = len(self.getFood(self.getPreviousObservation()).asList())
+      if (foodBefore - foodLeft == 1):
+        holdFood = holdFood + 1
+        print "holdFood = " + str(holdFood)
+
     """
     maxUtility = float("-inf")
     bestAction = None
@@ -234,106 +251,107 @@ class MinimaxAgent(CaptureAgent):
             closest = dist
     return closest
 
-  def evaluate(self, gameState, turn):
-      # features = self.getFeatures(gameState, turn)
-      # weights = self.getWeights(gameState)
-      features = util.Counter()
-      weights = util.Counter()
+  def evaluate(self, gameState, action, turn):
+      global holdFood
+      features = self.getFeatures(gameState, action)
+      weights = self.getWeights(gameState, action)
 
-      myteam = self.getTeam(gameState)
-      opponents = self.getOpponents(gameState)
-      if turn not in myteam:  # evaluate on the opponents' side
-          #if not len(self.observationHistory) == 1:  # avoid STOP action
-          #    if self.getPreviousObservation().getAgentState(self.index).getPosition() == self.getCurrentObservation().getAgentState(self.index).getPosition():
-          #        features['stop'] = 1
-          #weights['stop'] = -100
+      # if mode == 2:
+      print str(features['goHome'])+" "+str(features*weights)+" "+action+" "+str(holdFood)
+      # features = util.Counter()
+      # weights = util.Counter()
 
-          oppState = gameState.getAgentState(turn)
-          oppPos = oppState.getPosition()
-
-          enemies = [gameState.getAgentState(i) for i in myteam]
-          o = [gameState.getAgentState(i) for i in opponents]
-
-          ghosts = [a for a in enemies if not a.isPacman and a.getPosition() != None]
-          pacmans = [a for a in enemies if a.isPacman and a.getPosition() != None]
-          oppPacmans = [a for a in o if a.isPacman and a.getPosition() != None]
-
-          distsToEnemy = [self.getMazeDistance(oppPos, a.getPosition()) for a in enemies]
-          distsToGhost = [self.getMazeDistance(oppPos, a.getPosition()) for a in ghosts]
-          distsToOppPacman = [self.getMazeDistance(oppPos, a.getPosition()) for a in oppPacmans]
-
-          distsToAllEnemy = 0
-          for d in distsToEnemy:
-              distsToAllEnemy += d
-          # features['distsToAllEnemy'] = distsToAllEnemy
-          # weights['distsToAllEnemy'] = -10  # must be negative
-
-          # avoid being eaten by the ghost
-          distsToAllGhost = 0
-          for d in distsToGhost:
-              distsToAllGhost += d
-          # features['distsToAllGhost'] = distsToAllGhost
-          # weights['distsToAllGhost'] = -1
-          if distsToGhost:
-              features['distsToClosestGhost'] = min(distsToGhost)
-              if min(distsToGhost) > 2: # maintain a fixed distance between enemy
-                  weights['distsToClosestGhost'] = -1
-              #        weights['distsToAllGhost'] = -100
-              else:
-                  weights['distsToClosestGhost'] = -1
-          #        weights['distsToAllGhost'] = 100
-          #features['keepForward'] = 1
-          #for d in distsToGhost:
-          #    if d > 10:  # if Ghosts are far away
-          #        weights['keepForward'] = 1000
-          #    elif d <= 5:
-          #        weights['keepForward'] = -1000
-
-          # defensive behavior
-          features['numOfInvader'] = len(oppPacmans)
-          weights['numOfInvader'] = -1000
-
-          print "pacnum"+str(len(oppPacmans))
-          distsToAllPacmans = 0
-          for d in distsToOppPacman:
-              distsToAllPacmans += d
-          features['distsToAllPacmans'] = distsToAllPacmans
-          weights['distsToAllPacmans'] = -10000
-          # if distsToPacman:
-          #     features['distsToClosestPacman'] = min(distsToPacman)  # defensive feature
-          #     weights['distsToClosestPacman'] = -100
-              #weights['distsToAllPacmans'] = -10000
-
-          # if distsToAllPacmans:
-              # features['distsToClosestGhost'] = min(distsToGhost)
-          #    if oppState.scaredTimer != 0 and min(distsToAllPacmans) > 5:  # maintain a fixed distance between power pacman
-                  # weights['distsToClosestGhost'] = -100
-          #        weights['distsToAllPacmans'] = -100
-          #    else:
-                  # weights['distsToClosestGhost'] = 1
-          #        weights['distsToAllPacmans'] = 100
-
-
-          # offensive behavior
-          foodList = self.getFoodYouAreDefending(gameState).asList()
-          # features['currentScore'] = -len(foodList)
-          # weights['currentScore'] = 1000
-
-          # eat the closest food first
-          # if len(foodList) > 0:  # This should always be True,  but better safe than sorry
-          #     minDistance = min([self.getMazeDistance(oppPos, food) for food in foodList])
-          #     if minDistance < 10:
-          #         features['eatFood'] = -len(foodList)
-          #     features['distanceToFood'] = minDistance
-          # weights['distanceToFood'] = -1
-          # weights['eatFood'] = 1
-
-          # go back if have one food
-          if gameState.getAgentState(turn).numCarrying == 1:  # check number of food carried
-              foodDefending = self.getFood(gameState).asList()  # go back if have one food
-              minDistance = min([self.getMazeDistance(oppPos, food) for food in foodDefending])
-              #features['goHome'] = minDistance
-          #weights['goHome'] = 1000000
+      # myteam = self.getTeam(gameState)
+      # opponents = self.getOpponents(gameState)
+      # if turn not in myteam:  # evaluate on the opponents' side
+      #     #if not len(self.observationHistory) == 1:  # avoid STOP action
+      #     #    if self.getPreviousObservation().getAgentState(self.index).getPosition() == self.getCurrentObservation().getAgentState(self.index).getPosition():
+      #     #        features['stop'] = 1
+      #     #weights['stop'] = -100
+      #
+      #     #oppState = gameState.getAgentState(turn)
+      #     #oppPos = oppState.getPosition()
+      #
+      #     myState = gameState.getAgentState(self.index)
+      #     myPos = myState.getPosition()
+      #
+      #     enemies = [gameState.getAgentState(i) for i in myteam]
+      #     o = [gameState.getAgentState(i) for i in opponents]
+      #
+      #     #ghosts = [a for a in enemies if not a.isPacman and a.getPosition() != None]
+      #     ghosts = [a for a in o if not a.isPacman and a.getPosition() != None]
+      #     #pacmans = [a for a in enemies if a.isPacman and a.getPosition() != None]
+      #     oppPacmans = [a for a in o if a.isPacman and a.getPosition() != None]  # my opponents as pacmans
+      #
+      #     # distsToEnemy = [self.getMazeDistance(oppPos, a.getPosition()) for a in enemies]
+      #     distsToEnemy = [self.getMazeDistance(myPos, a.getPosition()) for a in enemies]
+      #     #distsToGhost = [self.getMazeDistance(oppPos, a.getPosition()) for a in ghosts]
+      #     distsToGhost = [self.getMazeDistance(myPos, a.getPosition()) for a in ghosts]
+      #     distsToOppPacman = [self.getMazeDistance(myPos, a.getPosition()) for a in oppPacmans]
+      #
+      #     distsToAllEnemy = 0
+      #     for d in distsToEnemy:
+      #         distsToAllEnemy += d
+      #     # features['distsToAllEnemy'] = distsToAllEnemy
+      #     # weights['distsToAllEnemy'] = -10  # must be negative
+      #
+      #     # avoid being eaten by the ghost
+      #     distsToAllGhost = 0
+      #     for d in distsToGhost:
+      #         distsToAllGhost += d
+      #     # features['distsToAllGhost'] = distsToAllGhost
+      #     # weights['distsToAllGhost'] = -1
+      #     # if distsToGhost:
+      #     #     features['distsToClosestGhost'] = min(distsToGhost)
+      #     #     if min(distsToGhost) > 3: # maintain a fixed distance between enemy
+      #     #         weights['distsToClosestGhost'] = -100
+      #     #     #        weights['distsToAllGhost'] = -100
+      #     #     else:
+      #     #         weights['distsToClosestGhost'] = 1000
+      #
+      #
+      #     # defensive feature behavior
+      #     features['numOfInvader'] = len(oppPacmans)
+      #     weights['numOfInvader'] = -1000
+      #     #print "pacnum "+str(len(oppPacmans))
+      #     distsToAllPacmans = 0
+      #     for d in distsToOppPacman:
+      #         distsToAllPacmans += d
+      #     features['distsToAllPacmans'] = distsToAllPacmans
+      #     weights['distsToAllPacmans'] = -10000
+      #
+      #     # scared feature: avoid being eaten when scared
+      #     # if distsToAllPacmans:
+      #         # features['distsToClosestGhost'] = min(distsToGhost)
+      #     #    if oppState.scaredTimer != 0 and min(distsToAllPacmans) > 5:  # maintain a fixed distance between power pacman
+      #             # weights['distsToClosestGhost'] = -100
+      #     #        weights['distsToAllPacmans'] = -100
+      #     #    else:
+      #             # weights['distsToClosestGhost'] = 1
+      #     #        weights['distsToAllPacmans'] = 100
+      #
+      #
+      #     # offensive behavior
+      #     foodList = self.getFood(gameState).asList()
+      #     features['currentScore'] = -len(foodList)
+      #     weights['currentScore'] = 100
+      #
+      #     # eat the closest food first
+      #     if len(foodList) > 0:  # This should always be True,  but better safe than sorry
+      #          minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
+      #          features['distanceToFood'] = minDistance
+      #          #if minDistance < 5:
+      #              #features['eatFood'] = minDistance
+      #              #weights['distanceToFood'] = -1000000
+      #     #weights['eatFood'] = -100
+      #     weights['distanceToFood'] = -1
+      #
+      #     # go back if have one food
+      #     if gameState.getAgentState(self.index).numCarrying == 1:  # check number of food carried
+      #         foodDefending = self.getFood(gameState).asList()  # go back if have one food
+      #         minDistance = min([self.getMazeDistance(myPos, food) for food in foodDefending])
+      #         features['goHome'] = minDistance
+          #weights['goHome'] = -1000000
 
           #features['distsToClosestEnemy'] = min(distsToEnemy)
           #weights['distsToClosestEnemy']= -1
@@ -510,70 +528,58 @@ class MinimaxAgent(CaptureAgent):
     return features * weights
   """
 
-  def getFeatures(self, gameState, turn): # features need to be redesigned to be fully informed
-    """
-    Returns a counter of features for the state
-    """
+  def getFeatures(self, gameState, action): # features need to be redesigned to be fully informed
+    # """
+    # Returns a counter of features for the state
+    # """
+    global mode
+    global holdFood
     features = util.Counter()
-    # successor = self.getSuccessor(gameState, action, turn)
-    # features['successorScore'] = self.getScore(successor)
 
-    myteam = self.getTeam(gameState)
-    if turn not in myteam:  # evaluate on the opponents' side
-        oppState = gameState.getAgentState(turn)
-        oppPos = oppState.getPosition()
+    # Offense
+    foodList = self.getFood(gameState).asList()
+    features['successorScore'] = -len(foodList)  # self.getScore(successor)
 
-        enemies = [gameState.getAgentState(i) for i in myteam]
-        ghosts = [a for a in enemies if not a.isPacman and a.getPosition() != None]
-        pacmans = [a for a in enemies if a.isPacman and a.getPosition() != None]
+    # Compute distance to the nearest food
 
-        # distsToEnemy = [self.getMazeDistance(oppPos, a.getPosition()) for a in enemies]
-        distsToGhost = [self.getMazeDistance(oppPos, a.getPosition()) for a in ghosts]
-        distsToPacman = [self.getMazeDistance(oppPos, a.getPosition()) for a in pacmans]
+    if len(foodList) > 0:  # This should always be True,  but better safe than sorry
+        myPos = gameState.getAgentState(self.index).getPosition()
+        minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
+        features['distanceToFood'] = minDistance
 
-        # distsToAllEnemy = 0
-        # for d in distsToEnemy:
-        #    distsToAllEnemy += d
+    myState = gameState.getAgentState(self.index)
+    myPos = myState.getPosition()
 
-        distsToAllGhost = 0
-        for d in distsToGhost:
-            distsToAllGhost += d
+    # Computes whether we're on defense (1) or offense (0)
+    features['onDefense'] = 1
+    if myState.isPacman: features['onDefense'] = 0
 
-        # defensive behavior
-        distsToAllPacmans = 0
-        for d in distsToPacman:
-            distsToAllPacmans += d
+    # Computes distance to invaders we can see
+    enemies = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+    invaders = [a for a in enemies if a.isPacman and a.getPosition() != None]
+    features['numInvaders'] = len(invaders)
+    if len(invaders) > 0:
+        mode = 1 #defense
+        dists = [self.getMazeDistance(myPos, a.getPosition()) for a in invaders]
+        features['invaderDistance'] = min(dists)
+    else:
+        mode = 0 #offense
 
-        # offensive behavior
-        foodList = self.getFoodYouAreDefending(gameState).asList()
-        features['currentScore'] = -len(foodList)
+    if action == Directions.STOP: features['stop'] = 1
+    rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
+    if action == rev: features['reverse'] = 1
 
-        # eat the closest food first
-        if len(foodList) > 0:  # This should always be True,  but better safe than sorry
-            minDistance = min([self.getMazeDistance(oppPos, food) for food in foodList])
-            features['distanceToFood'] = minDistance
+    if holdFood == 1*2: # hold food * depth
+        mode = 2
+        features['goHome'] = self.getMazeDistance(self.start, gameState.getAgentState(self.index).getPosition())
 
-        # go back if have one food
-        if gameState.getAgentState(turn).numCarrying == 1:  # check number of food carried
-            foodDefending = self.getFood(gameState).asList()  # go back if have one food
-            minDistance = min([self.getMazeDistance(oppPos, food) for food in foodDefending])
-            features['goHome'] = minDistance
-
-        # features['distsToClosestEnemy'] = min(distsToEnemy)
-        if distsToGhost:
-             features['distsToClosestGhost'] = min(distsToGhost)
-        if distsToPacman:
-            features['distsToClosestPacman'] = min(distsToPacman)  # defensive feature
-        features['distsToAllPacmans'] = distsToAllPacmans
-        # features['distsToAllEnemy'] = distsToAllEnemy
-        features['distsToAllGhost'] = distsToAllGhost
     return features
 
-  def getWeights(self, gameState):
-    """
-    Normally, weights do not depend on the gamestate.  They can be either
-    a counter or a dictionary.
-    """
+  def getWeights(self, gameState, action):
+    # """
+    # Normally, weights do not depend on the gamestate.  They can be either
+    # a counter or a dictionary.
+    # """
     return {'distsToClosestEnemy': 5,
             'distsToClosestGhost': -10,
             'distsToClosestPacman': 1000,
@@ -585,61 +591,100 @@ class MinimaxAgent(CaptureAgent):
             'distanceToFood': 1000}
 
 
+  def offWeight(self, gameState, action):
+      return {'successorScore': 100, 'distanceToFood': -1, 'goHome': -1000}
+  def gohomeWeight(self, gameState, action):
+      return {'goHome': -1}
+  def defWeight(self, gameState, action):
+      return {'numInvaders': -10000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2}
 class OffensiveMinimaxAgent(MinimaxAgent):
     """
       A Minimax agent that seeks food. This is an agent
     """
 
-    def getFeatures(self, gameState, action, turn):
-        features = util.Counter()
-        successor = self.getSuccessor(gameState, action, self.index)
-        foodList = self.getFood(successor).asList()
-        features['successorScore'] = -len(foodList)  # self.getScore(successor)
-
-        # Compute distance to the nearest food
-
-        if len(foodList) > 0:  # This should always be True,  but better safe than sorry
-            myPos = successor.getAgentState(turn).getPosition()
-            minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
-            features['distanceToFood'] = minDistance
-        return features
+    # def getFeatures(self, gameState, action):
+    #     # features = util.Counter()
+    #     # successor = self.getSuccessor(gameState, action, self.index)
+    #     # foodList = self.getFood(successor).asList()
+    #     # features['successorScore'] = -len(foodList)  # self.getScore(successor)
+    #     #
+    #     # # Compute distance to the nearest food
+    #     #
+    #     # if len(foodList) > 0:  # This should always be True,  but better safe than sorry
+    #     #     myPos = successor.getAgentState(self.index).getPosition()
+    #     #     minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
+    #     #     features['distanceToFood'] = minDistance
+    #
+    #     features = util.Counter()
+    #     foodList = self.getFood(gameState).asList()
+    #     features['successorScore'] = -len(foodList)  # self.getScore(successor)
+    #
+    #     # Compute distance to the nearest food
+    #
+    #     if len(foodList) > 0:  # This should always be True,  but better safe than sorry
+    #         myPos = gameState.getAgentState(self.index).getPosition()
+    #         minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
+    #         features['distanceToFood'] = minDistance
+    #
+    #     return features
 
     def getWeights(self, gameState, action):
-        return {'successorScore': 100, 'distanceToFood': -1}
+        global mode
+        if mode == 0:
+            return self.offWeight(gameState, action)
+        if mode == 2:
+            return self.gohomeWeight(gameState, action)
+        #default
+        return self.offWeight(gameState, action)
 
-class defensiveMinimaxAgent(MinimaxAgent):
+class DefensiveMinimaxAgent(MinimaxAgent):
     """
       A Minimax agent that keeps its side Pacman-free.
     """
 
-    def getFeatures(self, gameState, action, turn):
-        features = util.Counter()
-        successor = self.getSuccessor(gameState, action, self.index)
-
-        myState = successor.getAgentState(self.index)
-        myPos = myState.getPosition()
-
-        # Computes whether we're on defense (1) or offense (0)
-        features['onDefense'] = 1
-        if myState.isPacman: features['onDefense'] = 0
-
-        # Computes distance to invaders we can see
-        enemies = [successor.getAgentState(i) for i in self.getOpponents(successor)]
-        invaders = [a for a in enemies if a.isPacman and a.getPosition() != None]
-        features['numInvaders'] = len(invaders)
-        if len(invaders) > 0:
-            dists = [self.getMazeDistance(myPos, a.getPosition()) for a in invaders]
-            features['invaderDistance'] = min(dists)
-
-        if action == Directions.STOP: features['stop'] = 1
-        rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
-        if action == rev: features['reverse'] = 1
-
-        return features
+    # def getFeatures(self, gameState, action):
+    #     features = util.Counter()
+    #
+    #     myState = gameState.getAgentState(self.index)
+    #     myPos = myState.getPosition()
+    #
+    #     # Computes whether we're on defense (1) or offense (0)
+    #     features['onDefense'] = 1
+    #     if myState.isPacman: features['onDefense'] = 0
+    #
+    #     # Computes distance to invaders we can see
+    #     enemies = [gameState.getAgentState(i) for i in self.getOpponents(gameState)]
+    #     invaders = [a for a in enemies if a.isPacman and a.getPosition() != None]
+    #     features['numInvaders'] = len(invaders)
+    #     if len(invaders) > 0:
+    #         dists = [self.getMazeDistance(myPos, a.getPosition()) for a in invaders]
+    #         features['invaderDistance'] = min(dists)
+    #     else:
+    #         #Offense
+    #         foodList = self.getFood(gameState).asList()
+    #         features['successorScore'] = -len(foodList)  # self.getScore(successor)
+    #
+    #         # Compute distance to the nearest food
+    #
+    #         if len(foodList) > 0:  # This should always be True,  but better safe than sorry
+    #             myPos = gameState.getAgentState(self.index).getPosition()
+    #             minDistance = min([self.getMazeDistance(myPos, food) for food in foodList])
+    #             features['distanceToFood'] = minDistance
+    #
+    #     if action == Directions.STOP: features['stop'] = 1
+    #     rev = Directions.REVERSE[gameState.getAgentState(self.index).configuration.direction]
+    #     if action == rev: features['reverse'] = 1
+    #
+    #     return features
 
     def getWeights(self, gameState, action):
-
-        return {'numInvaders': -1000, 'onDefense': 100, 'invaderDistance': -10, 'stop': -100, 'reverse': -2}
+        global mode
+        if mode == 0:
+            return self.offWeight(gameState, action )
+        if mode == 1:
+            return self.defWeight(gameState, action)
+        #default
+        return self.defWeight(gameState, action)
 
 
 class DummyAgent(CaptureAgent):

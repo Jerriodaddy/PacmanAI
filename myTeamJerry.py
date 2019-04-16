@@ -142,7 +142,7 @@ class OffensiveReflexMaxMinAgent(ReflexCaptureAgent):
     """
     Picks among the actions with the highest Q(s,a).
     """
-    global holdFood
+    global aholdFood
     global goHome
 
     if goHome==1 and not gameState.getAgentState(self.index).isPacman:
