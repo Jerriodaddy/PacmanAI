@@ -174,7 +174,7 @@ class MinimaxAgent(CaptureAgent):
     # if holdFood == 1*2 and not gameState.getAgentState(self.index).isPacman:
     #     print "Get home"
     #     holdFood = 0
-        
+
     value = float("-inf")
     actions = gameState.getLegalActions(self.index)
     bestAction = None
